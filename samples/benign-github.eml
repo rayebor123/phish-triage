@@ -1,0 +1,16 @@
+Return-Path: <no-reply@github.com>
+Received: from out-24.smtp.github.com (out-24.smtp.github.com [192.30.252.192])
+	by mx.google.com with ESMTPS id b9si193847qkf.2
+	for <dev@example.com>; Thu, 17 Sep 2026 08:02:11 -0700 (PDT)
+Authentication-Results: mx.google.com;
+       spf=pass (google.com: domain of no-reply@github.com designates 192.30.252.192 as permitted sender) smtp.mailfrom=no-reply@github.com;
+       dkim=pass header.i=@github.com;
+       dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=github.com
+From: GitHub <no-reply@github.com>
+To: dev@example.com
+Subject: [example/repo] Your pull request was merged
+Date: Thu, 17 Sep 2026 08:02:09 -0700
+MIME-Version: 1.0
+Content-Type: text/html; charset="UTF-8"
+
+<html><body><p>Your pull request <a href="https://github.com/example/repo/pull/42">#42</a> was merged.</p></body></html>

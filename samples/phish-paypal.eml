@@ -1,0 +1,21 @@
+Return-Path: <bounce@mail-relay-77.ru>
+Received: from mail-relay-77.ru (mail-relay-77.ru [185.220.101.45])
+	by mx.google.com with ESMTPS id x1si2938471qtp.1
+	for <victim@example.com>; Thu, 17 Sep 2026 09:14:22 -0700 (PDT)
+Authentication-Results: mx.google.com;
+       spf=fail (google.com: domain of bounce@mail-relay-77.ru does not designate 185.220.101.45 as permitted sender) smtp.mailfrom=bounce@mail-relay-77.ru;
+       dkim=none;
+       dmarc=fail (p=REJECT sp=REJECT dis=NONE) header.from=paypal-secure-login.ru
+From: "PayPal Security Team" <service@paypal-secure-login.ru>
+Reply-To: <recovery-desk@protonmail.com>
+To: victim@example.com
+Subject: Urgent: Your PayPal account has been limited
+Date: Thu, 17 Sep 2026 09:14:20 -0700
+MIME-Version: 1.0
+Content-Type: text/html; charset="UTF-8"
+
+<html><body>
+<p>Dear Customer,</p>
+<p>We detected unusual activity. Please <a href="http://paypal-secure-login.ru/verify?u=dmljdGltQGV4YW1wbGUuY29t">https://www.paypal.com/signin</a> to restore access within 24 hours.</p>
+<p>Thank you, PayPal Security</p>
+</body></html>
