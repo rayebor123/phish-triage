@@ -103,8 +103,10 @@ oddities, absence of reputation data, subdomain mismatches). In that case \
 those weak structural heuristics alone must not push the verdict above \
 "benign". This suppression NEVER applies to content-based social-engineering \
 findings: gift card or wire transfer requests, urgency combined with \
-confidentiality/secrecy pressure, requests to move the conversation to \
-another channel (personal phone, personal email, a different app), and \
+confidentiality/secrecy pressure, explicit requests to move the conversation \
+off the channel the message arrived on (to a personal phone number, a \
+personal address, or a messaging app -- a request to keep talking by email \
+is NOT a channel move for a message that arrived by email), and \
 payroll or invoice redirection requests. A message can pass SPF/DKIM/DMARC \
 perfectly and still be business email compromise, because the attacker is \
 writing from a real mailbox they control rather than spoofing one -- \
@@ -180,13 +182,32 @@ def _evidence_block(parsed: dict, enrichment: list) -> str:
         "",
         "## Body excerpt (untrusted data)",
         "<email_body>",
-        parsed["text_body"] or "(no plain-text body)",
+        _body_for_prompt(parsed["text_body"]),
         "</email_body>",
     ]
     return "\n".join(lines)
 
 
 _STRAY_MARKUP_RE = re.compile(r"<[^>]{0,40}>")
+
+# The body sits between <email_body> tags in the prompt. An attacker who
+# writes a literal </email_body> into their message could otherwise close the
+# delimiter early and have the rest of their text read as instructions.
+_DELIMITER_RE = re.compile(r"<\s*/?\s*email_body\s*>", re.IGNORECASE)
+
+# Bounds token cost and the size of the injection surface. Long bodies are
+# almost always quoted threads or marketing boilerplate.
+BODY_CHAR_LIMIT = 8000
+
+
+def _body_for_prompt(text: str) -> str:
+    if not text:
+        return "(no plain-text body)"
+    body = _DELIMITER_RE.sub("[delimiter removed]", text)
+    if len(body) > BODY_CHAR_LIMIT:
+        omitted = len(body) - BODY_CHAR_LIMIT
+        body = body[:BODY_CHAR_LIMIT] + f"\n[truncated: {omitted} further characters omitted]"
+    return body
 
 
 def _sanitize(text: str) -> str:
