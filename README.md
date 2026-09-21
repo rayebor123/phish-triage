@@ -4,6 +4,14 @@ Upload a raw `.eml` file and get an analyst-ready phishing verdict. Deterministi
 checks extract the evidence; Claude synthesizes it into a verdict, confidence
 score, indicator list, and recommended action.
 
+![Phishing Triage verdict panel showing a malicious verdict at 90% confidence for a gift-card business email compromise message impersonating an executive, with indicators for gift-card urgency pressure, confidentiality pressure, and a free-webmail sending domain](docs/verdict-bec-auth-pass.png)
+
+A gift-card BEC message that passes SPF, DKIM, and DMARC, correctly flagged malicious from content alone.
+
+![Message metadata, authentication, and threat-intelligence panels for the same BEC message, showing SPF, DKIM, and DMARC all passing and no threat-intelligence detections, with the raw body excerpt showing the gift-card request](docs/verdict-bec-details.png)
+
+Authentication passes cleanly and every threat-intel lookup comes back clean — the verdict rests entirely on what the message asks the recipient to do.
+
 ## How it works
 
 1. **Parse** (`email_parser.py`) — pulls SPF/DKIM/DMARC results, sender/display-name
