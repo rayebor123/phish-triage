@@ -9,6 +9,7 @@ Safety properties of this module:
 
 import email
 import hashlib
+import html
 import ipaddress
 import re
 from email import policy
@@ -435,6 +436,7 @@ def parse_email(raw: bytes) -> dict:
 
     from_domain = from_addr.split("@")[-1].lower() if "@" in from_addr else ""
     text_body, html_body, parse_warnings = _bodies(msg)
+    text_body = html.unescape(text_body)
 
     # HTML-only messages leave text_body empty; derive readable text from the
     # HTML so the model still gets body content, excluding style/script text.
