@@ -25,6 +25,17 @@ VERDICT_STYLE = {
 }
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 
+# AbuseIPDB confidence at or above this is shown as a detection. Below it, a
+# non-zero score is shown as low-confidence -- large mail providers' shared
+# outbound relays routinely carry small scores from their abusive users.
+ABUSE_DETECTION_SCORE = 50
+
+# Model output and header-derived findings can contain attacker-chosen text
+# (the model quotes the body). Streamlit renders markdown in st.write,
+# st.markdown, st.caption and st.info, which would turn a quoted
+# [link](http://...) or a bare address into something clickable. Everything
+# that isn't our own fixed markup goes through st.text instead.
+
 st.title("🛡 Phishing Triage")
 st.caption(
     "Upload a raw email. Deterministic checks gather the evidence; "
@@ -62,16 +73,16 @@ if uploaded is not None:
         )
         st.write("")
         st.subheader("Assessment")
-        st.write(result["summary"])
-        st.info(f"**Recommended action:** {result['recommended_action']}")
+        st.text(result["summary"])
+        st.markdown("**Recommended action**")
+        st.text(result["recommended_action"])
 
         st.subheader("Indicators")
         for ind in sorted(
             result["indicators"], key=lambda i: SEVERITY_ORDER.get(i["severity"], 3)
         ):
             badge = {"high": "🔴", "medium": "🟠", "low": "🟡"}.get(ind["severity"], "⚪")
-            st.markdown(f"{badge} **{ind['indicator']}**")
-            st.caption(ind["evidence"])
+            st.text(f"{badge} {ind['indicator']}\n    {ind['evidence']}")
 
     st.divider()
     left, right = st.columns(2)
@@ -100,7 +111,7 @@ if uploaded is not None:
         st.subheader("Deterministic findings")
         if parsed["header_findings"]:
             for f in parsed["header_findings"]:
-                st.markdown(f"- {f}")
+                st.text(f"• {f}")
         else:
             st.caption("No header anomalies detected.")
 
@@ -122,19 +133,27 @@ if uploaded is not None:
         st.subheader("Threat intelligence")
 
         def _threat_tier(e):
-            has_detection = e.get("malicious") or e.get("suspicious") or e.get("score")
-            if e["status"] == "ok" and has_detection:
-                return 0  # malicious/suspicious counts or a non-zero abuse score
             if e["status"] in ("unavailable", "rate_limited"):
-                return 2  # lookup failed or was skipped
-            return 1  # ok-but-clean, or not_found
+                return 3  # lookup failed or was skipped
+            if e["status"] != "ok":
+                return 2  # not_found
+            # enrich.py already separates real VirusTotal detections from
+            # stray-vendor noise via the "detection" flag -- respect it.
+            if e.get("detection") or e.get("score", 0) >= ABUSE_DETECTION_SCORE:
+                return 0  # real detection
+            if e.get("malicious") or e.get("suspicious") or e.get("score"):
+                return 1  # low-confidence signal
+            return 2  # clean
 
         for e in sorted(enrichment, key=_threat_tier):
-            label = f"**{e['source']}** · `{defang(e['indicator'])}` — {e['status']}: {e['detail']}"
-            if _threat_tier(e) == 0:
+            label = f"{e['source']} · {defang(e['indicator'])} — {e['status']}: {e['detail']}"
+            tier = _threat_tier(e)
+            if tier == 0:
                 st.error(label, icon="🔴")
+            elif tier == 1:
+                st.warning(label, icon="🟡")
             else:
-                st.caption(label)
+                st.text(label)
 
     with st.expander("Raw body excerpt (inert text — never rendered as HTML)"):
         st.text(parsed["text_body"] or "(no plain-text body)")
