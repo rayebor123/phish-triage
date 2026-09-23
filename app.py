@@ -7,16 +7,20 @@ executes the phishing page's HTML and JavaScript in your own browser and loads
 its remote tracking pixels.
 """
 
+import altair as alt
+import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
 load_dotenv()
 
+import storage  # noqa: E402
 from email_parser import defang, parse_email  # noqa: E402
 from enrich import enrich  # noqa: E402
 from verdict import get_verdict  # noqa: E402
 
 st.set_page_config(page_title="Phishing Triage", page_icon="🛡", layout="wide")
+storage.init_db()
 
 VERDICT_STYLE = {
     "malicious": ("🔴", "#b00020"),
@@ -36,126 +40,232 @@ ABUSE_DETECTION_SCORE = 50
 # [link](http://...) or a bare address into something clickable. Everything
 # that isn't our own fixed markup goes through st.text instead.
 
+# A Streamlit rerun re-executes this whole script on every widget interaction
+# (e.g. editing a status cell in the Dashboard tab), not just the tab that
+# changed. Caching each triage step means switching tabs or editing a status
+# doesn't re-hit the paid Anthropic/threat-intel APIs or write duplicate
+# history rows for the same upload.
+
+
+@st.cache_data(show_spinner="Parsing message…")
+def _parse(raw: bytes):
+    return parse_email(raw)
+
+
+@st.cache_data(show_spinner="Checking reputation…")
+def _enrich(parsed: dict):
+    return enrich(parsed)
+
+
+@st.cache_data(show_spinner="Synthesizing verdict…")
+def _verdict(parsed: dict, enrichment: list):
+    return get_verdict(parsed, enrichment)
+
+
+@st.cache_data(show_spinner=False)
+def _save(filename: str, parsed: dict, result: dict):
+    return storage.save_result(filename, parsed, result)
+
+
 st.title("🛡 Phishing Triage")
 st.caption(
     "Upload a raw email. Deterministic checks gather the evidence; "
     "the model synthesizes an analyst-ready verdict."
 )
 
-uploaded = st.file_uploader("Raw email (.eml)", type=["eml", "txt"])
+tab_triage, tab_dashboard = st.tabs(["Single email", "Dashboard"])
 
-if uploaded is not None:
-    raw = uploaded.read()
+with tab_triage:
+    uploaded = st.file_uploader("Raw email (.eml)", type=["eml", "txt"])
 
-    with st.spinner("Parsing message…"):
-        parsed = parse_email(raw)
+    if uploaded is not None:
+        raw = uploaded.read()
 
-    with st.spinner("Checking reputation…"):
-        enrichment = enrich(parsed)
+        parsed = _parse(raw)
+        enrichment = _enrich(parsed)
 
-    with st.spinner("Synthesizing verdict…"):
         try:
-            result = get_verdict(parsed, enrichment)
+            result = _verdict(parsed, enrichment)
         except Exception as exc:  # keep the demo alive if the API hiccups
             st.error(f"Verdict step failed: {exc}")
             result = None
 
-    if result:
-        icon, color = VERDICT_STYLE.get(result["verdict"], ("⚪", "#555"))
-        st.markdown(
-            f"<div style='padding:1rem 1.25rem;border-radius:.5rem;"
-            f"background:{color};color:#fff;'>"
-            f"<span style='font-size:1.6rem;font-weight:700;'>"
-            f"{icon} {result['verdict'].upper()}</span>"
-            f"<span style='float:right;font-size:1.1rem;opacity:.9;'>"
-            f"confidence {result['confidence']}%</span></div>",
-            unsafe_allow_html=True,  # our own trusted markup, never email content
-        )
-        st.write("")
-        st.subheader("Assessment")
-        st.text(result["summary"])
-        st.markdown("**Recommended action**")
-        st.text(result["recommended_action"])
+        if result:
+            history_id = _save(uploaded.name, parsed, result)
 
-        st.subheader("Indicators")
-        for ind in sorted(
-            result["indicators"], key=lambda i: SEVERITY_ORDER.get(i["severity"], 3)
-        ):
-            badge = {"high": "🔴", "medium": "🟠", "low": "🟡"}.get(ind["severity"], "⚪")
-            st.text(f"{badge} {ind['indicator']}\n    {ind['evidence']}")
+            icon, color = VERDICT_STYLE.get(result["verdict"], ("⚪", "#555"))
+            st.markdown(
+                f"<div style='padding:1rem 1.25rem;border-radius:.5rem;"
+                f"background:{color};color:#fff;'>"
+                f"<span style='font-size:1.6rem;font-weight:700;'>"
+                f"{icon} {result['verdict'].upper()}</span>"
+                f"<span style='float:right;font-size:1.1rem;opacity:.9;'>"
+                f"confidence {result['confidence']}%</span></div>",
+                unsafe_allow_html=True,  # our own trusted markup, never email content
+            )
+            st.caption(f"Saved to triage history (ID {history_id}). Set its status in the Dashboard tab.")
+            st.write("")
+            st.subheader("Assessment")
+            st.text(result["summary"])
+            st.markdown("**Recommended action**")
+            st.text(result["recommended_action"])
 
-    st.divider()
-    left, right = st.columns(2)
+            st.subheader("Indicators")
+            for ind in sorted(
+                result["indicators"], key=lambda i: SEVERITY_ORDER.get(i["severity"], 3)
+            ):
+                badge = {"high": "🔴", "medium": "🟠", "low": "🟡"}.get(ind["severity"], "⚪")
+                st.text(f"{badge} {ind['indicator']}\n    {ind['evidence']}")
 
-    with left:
-        st.subheader("Message metadata")
-        st.write(
-            {
-                "Subject": parsed["subject"],
-                "Display name": parsed["from_name"] or "—",
-                "From": parsed["from_addr"] or "—",
-                "Reply-To": parsed["reply_to"] or "—",
-                "Return-Path": parsed["return_path"] or "—",
-                "Date": parsed["date"] or "—",
+        st.divider()
+        left, right = st.columns(2)
+
+        with left:
+            st.subheader("Message metadata")
+            st.write(
+                {
+                    "Subject": parsed["subject"],
+                    "Display name": parsed["from_name"] or "—",
+                    "From": parsed["from_addr"] or "—",
+                    "Reply-To": parsed["reply_to"] or "—",
+                    "Return-Path": parsed["return_path"] or "—",
+                    "Date": parsed["date"] or "—",
+                }
+            )
+
+            st.subheader("Authentication")
+            a = parsed["auth"]
+            cols = st.columns(3)
+            for col, mech in zip(cols, ("spf", "dkim", "dmarc")):
+                state = a[mech]
+                mark = "✅" if state == "pass" else ("❌" if state in ("fail", "softfail") else "⚠️")
+                col.metric(mech.upper(), f"{mark} {state}")
+
+            st.subheader("Deterministic findings")
+            if parsed["header_findings"]:
+                for f in parsed["header_findings"]:
+                    st.text(f"• {f}")
+            else:
+                st.caption("No header anomalies detected.")
+
+        with right:
+            st.subheader("Indicators extracted")
+            if parsed["links"]:
+                st.caption("URLs (defanged — safe to read, not clickable)")
+                for link in parsed["links"][:15]:
+                    flag = " ⚠️ anchor text mismatch" if link["mismatch"] else ""
+                    st.code(defang(link["url"]) + flag, language=None)
+            if parsed["ips"]:
+                st.caption("Routing IPs")
+                st.code("\n".join(defang(ip) for ip in parsed["ips"][:8]), language=None)
+            if parsed["attachments"]:
+                st.caption("Attachments (hashed in memory, never written to disk)")
+                for att in parsed["attachments"]:
+                    st.code(f"{att['filename']}  {att['sha256'][:32]}…", language=None)
+
+            st.subheader("Threat intelligence")
+
+            def _threat_tier(e):
+                if e["status"] in ("unavailable", "rate_limited"):
+                    return 3  # lookup failed or was skipped
+                if e["status"] != "ok":
+                    return 2  # not_found
+                # enrich.py already separates real VirusTotal detections from
+                # stray-vendor noise via the "detection" flag -- respect it.
+                if e.get("detection") or e.get("score", 0) >= ABUSE_DETECTION_SCORE:
+                    return 0  # real detection
+                if e.get("malicious") or e.get("suspicious") or e.get("score"):
+                    return 1  # low-confidence signal
+                return 2  # clean
+
+            for e in sorted(enrichment, key=_threat_tier):
+                label = f"{e['source']} · {defang(e['indicator'])} — {e['status']}: {e['detail']}"
+                tier = _threat_tier(e)
+                if tier == 0:
+                    st.error(label, icon="🔴")
+                elif tier == 1:
+                    st.warning(label, icon="🟡")
+                else:
+                    st.text(label)
+
+        with st.expander("Raw body excerpt (inert text — never rendered as HTML)"):
+            st.text(parsed["text_body"] or "(no plain-text body)")
+    else:
+        st.info("Upload a .eml file to begin. In Gmail: ⋮ → Show original → Download Original.")
+
+with tab_dashboard:
+    st.subheader("Triage history")
+    emails = storage.get_all_emails()
+
+    if not emails:
+        st.info("No emails analyzed yet. Results from the Single email tab are saved here automatically.")
+    else:
+        history_df = pd.DataFrame(emails)
+        total = len(history_df)
+        verdict_counts = history_df["verdict"].value_counts()
+        avg_confidence = history_df["confidence"].mean()
+
+        stat_cols = st.columns(5)
+        stat_cols[0].metric("Total analyzed", total)
+        for col, verdict in zip(stat_cols[1:4], ("malicious", "suspicious", "benign")):
+            n = int(verdict_counts.get(verdict, 0))
+            col.metric(verdict.capitalize(), f"{n} ({n / total:.0%})")
+        stat_cols[4].metric("Avg. confidence", f"{avg_confidence:.0f}%")
+
+        st.subheader("Processed emails")
+        st.caption("Edit Status inline to track what's been actioned.")
+
+        table_df = history_df[
+            ["id", "timestamp", "filename", "subject", "verdict", "confidence", "status"]
+        ].rename(
+            columns={
+                "id": "ID",
+                "timestamp": "Analyzed (UTC)",
+                "filename": "File",
+                "subject": "Subject",
+                "verdict": "Verdict",
+                "confidence": "Confidence",
+                "status": "Status",
             }
         )
+        edited_df = st.data_editor(
+            table_df,
+            hide_index=True,
+            disabled=["ID", "Analyzed (UTC)", "File", "Subject", "Verdict", "Confidence"],
+            column_config={
+                "Confidence": st.column_config.NumberColumn(format="%d%%"),
+                "Status": st.column_config.SelectboxColumn(options=storage.STATUSES, required=True),
+            },
+            key="history_editor",
+            width="stretch",
+        )
 
-        st.subheader("Authentication")
-        a = parsed["auth"]
-        cols = st.columns(3)
-        for col, mech in zip(cols, ("spf", "dkim", "dmarc")):
-            state = a[mech]
-            mark = "✅" if state == "pass" else ("❌" if state in ("fail", "softfail") else "⚠️")
-            col.metric(mech.upper(), f"{mark} {state}")
+        changed = edited_df[edited_df["Status"] != table_df["Status"]]
+        if not changed.empty:
+            for _, row in changed.iterrows():
+                storage.update_status(int(row["ID"]), row["Status"])
+            st.rerun()
 
-        st.subheader("Deterministic findings")
-        if parsed["header_findings"]:
-            for f in parsed["header_findings"]:
-                st.text(f"• {f}")
+        st.subheader("Most common indicators")
+        top_indicators = storage.indicator_counts(limit=10)
+        if top_indicators:
+            st.caption("Top 10 indicator strings by how often they've been cited across all verdicts.")
+            indicator_df = pd.DataFrame(top_indicators, columns=["Indicator", "Count"])
+            max_count = int(indicator_df["Count"].max())
+            chart = (
+                alt.Chart(indicator_df)
+                .mark_bar(color="#2a78d6", cornerRadiusEnd=4)
+                .encode(
+                    x=alt.X(
+                        "Count:Q",
+                        title="Times cited",
+                        axis=alt.Axis(values=list(range(max_count + 1)), format="d"),
+                    ),
+                    y=alt.Y("Indicator:N", sort="-x", title=None),
+                    tooltip=["Indicator", "Count"],
+                )
+                .properties(height=max(120, 32 * len(indicator_df)))
+            )
+            st.altair_chart(chart, width="stretch")
         else:
-            st.caption("No header anomalies detected.")
-
-    with right:
-        st.subheader("Indicators extracted")
-        if parsed["links"]:
-            st.caption("URLs (defanged — safe to read, not clickable)")
-            for link in parsed["links"][:15]:
-                flag = " ⚠️ anchor text mismatch" if link["mismatch"] else ""
-                st.code(defang(link["url"]) + flag, language=None)
-        if parsed["ips"]:
-            st.caption("Routing IPs")
-            st.code("\n".join(defang(ip) for ip in parsed["ips"][:8]), language=None)
-        if parsed["attachments"]:
-            st.caption("Attachments (hashed in memory, never written to disk)")
-            for att in parsed["attachments"]:
-                st.code(f"{att['filename']}  {att['sha256'][:32]}…", language=None)
-
-        st.subheader("Threat intelligence")
-
-        def _threat_tier(e):
-            if e["status"] in ("unavailable", "rate_limited"):
-                return 3  # lookup failed or was skipped
-            if e["status"] != "ok":
-                return 2  # not_found
-            # enrich.py already separates real VirusTotal detections from
-            # stray-vendor noise via the "detection" flag -- respect it.
-            if e.get("detection") or e.get("score", 0) >= ABUSE_DETECTION_SCORE:
-                return 0  # real detection
-            if e.get("malicious") or e.get("suspicious") or e.get("score"):
-                return 1  # low-confidence signal
-            return 2  # clean
-
-        for e in sorted(enrichment, key=_threat_tier):
-            label = f"{e['source']} · {defang(e['indicator'])} — {e['status']}: {e['detail']}"
-            tier = _threat_tier(e)
-            if tier == 0:
-                st.error(label, icon="🔴")
-            elif tier == 1:
-                st.warning(label, icon="🟡")
-            else:
-                st.text(label)
-
-    with st.expander("Raw body excerpt (inert text — never rendered as HTML)"):
-        st.text(parsed["text_body"] or "(no plain-text body)")
-else:
-    st.info("Upload a .eml file to begin. In Gmail: ⋮ → Show original → Download Original.")
+            st.caption("No indicators recorded yet.")
