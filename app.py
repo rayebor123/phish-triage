@@ -264,11 +264,11 @@ with tab_dashboard:
         benign_n = int(verdict_counts.get("benign", 0))
 
         kpis = [
-            ("Total analyzed", str(total), "#ffffff"),
-            ("Malicious", f"{malicious_n} ({malicious_n / total:.0%})", "#ff4d5e"),
-            ("Suspicious", f"{suspicious_n} ({suspicious_n / total:.0%})", "#ffa733"),
-            ("Benign", f"{benign_n} ({benign_n / total:.0%})", "#3ddc6f"),
-            ("Avg. confidence", f"{avg_confidence:.0f}%", "#ffffff"),
+            ("TOTAL ANALYZED", str(total), "#ffffff"),
+            ("MALICIOUS", f"{malicious_n} ({malicious_n / total:.0%})", "#ff4d5e"),
+            ("SUSPICIOUS", f"{suspicious_n} ({suspicious_n / total:.0%})", "#ffa733"),
+            ("BENIGN", f"{benign_n} ({benign_n / total:.0%})", "#3ddc6f"),
+            ("AVG. CONFIDENCE", f"{avg_confidence:.0f}%", "#ffffff"),
         ]
         kpi_cols = st.columns(5)
         for col, (label, value, kcolor) in zip(kpi_cols, kpis):
