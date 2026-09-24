@@ -36,6 +36,7 @@ VERDICT_COLOR_SCALE = alt.Scale(
 )
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 SEVERITY_COLOR = {"high": "#b00020", "medium": "#c77700", "low": "#9c7a00"}
+SEVERITY_COLOR_SCALE = alt.Scale(domain=["high", "medium", "low"], range=["#b00020", "#c77700", "#9c7a00"])
 SEVERITY_BADGE = {"high": "🔴", "medium": "🟠", "low": "🟡"}
 
 # AbuseIPDB confidence at or above this is shown as a detection. Below it, a
@@ -302,11 +303,11 @@ with tab_dashboard:
             st.caption("Most common indicators")
             top_indicators = storage.indicator_counts(limit=10)
             if top_indicators:
-                indicator_df = pd.DataFrame(top_indicators, columns=["Indicator", "Count"])
+                indicator_df = pd.DataFrame(top_indicators, columns=["Indicator", "Count", "Severity"])
                 max_count = int(indicator_df["Count"].max())
                 bar_chart = (
                     alt.Chart(indicator_df)
-                    .mark_bar(color="#2a78d6", cornerRadiusEnd=4)
+                    .mark_bar(cornerRadiusEnd=4)
                     .encode(
                         x=alt.X(
                             "Count:Q",
@@ -314,7 +315,12 @@ with tab_dashboard:
                             axis=alt.Axis(values=list(range(max_count + 1)), format="d"),
                         ),
                         y=alt.Y("Indicator:N", sort="-x", title=None),
-                        tooltip=["Indicator", "Count"],
+                        color=alt.Color(
+                            "Severity:N",
+                            scale=SEVERITY_COLOR_SCALE,
+                            legend=alt.Legend(title=None, orient="bottom"),
+                        ),
+                        tooltip=["Indicator", "Count", "Severity"],
                     )
                     .properties(height=260)
                 )

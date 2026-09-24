@@ -102,11 +102,23 @@ def update_status(email_id: int, status: str) -> None:
 
 
 def indicator_counts(limit: int = 10) -> list[tuple]:
-    """Most frequently cited indicator strings across all saved verdicts."""
+    """Most frequently cited indicator strings, each with its total count and
+    most common severity (an indicator string can in principle carry a
+    different severity across emails since it's model-generated free text)."""
     conn = _connect()
     rows = conn.execute(
-        "SELECT indicator, COUNT(*) AS n FROM indicators GROUP BY indicator ORDER BY n DESC LIMIT ?",
-        (limit,),
+        "SELECT indicator, severity, COUNT(*) AS n FROM indicators GROUP BY indicator, severity"
     ).fetchall()
     conn.close()
-    return [(r["indicator"], r["n"]) for r in rows]
+
+    totals: dict = {}
+    severity_counts: dict = {}
+    for r in rows:
+        totals[r["indicator"]] = totals.get(r["indicator"], 0) + r["n"]
+        severity_counts.setdefault(r["indicator"], {})[r["severity"]] = r["n"]
+
+    ranked = sorted(totals.items(), key=lambda kv: kv[1], reverse=True)[:limit]
+    return [
+        (indicator, total, max(severity_counts[indicator].items(), key=lambda kv: kv[1])[0])
+        for indicator, total in ranked
+    ]
