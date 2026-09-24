@@ -36,7 +36,7 @@ VERDICT_COLOR_SCALE = alt.Scale(
 )
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 SEVERITY_COLOR = {"high": "#b00020", "medium": "#c77700", "low": "#b8860b"}
-SEVERITY_COLOR_SCALE = alt.Scale(domain=["high", "medium", "low"], range=["#b00020", "#c77700", "#b8860b"])
+SEVERITY_COLOR_SCALE = alt.Scale(domain=["high", "medium", "low"], range=["#b00020", "#c77700", "#FFFFE0"])
 SEVERITY_BADGE = {"high": "🔴", "medium": "🟠", "low": "🟡"}
 
 # AbuseIPDB confidence at or above this is shown as a detection. Below it, a
@@ -323,6 +323,12 @@ with tab_dashboard:
                         tooltip=["Indicator", "Count", "Severity"],
                     )
                     .properties(height=260)
+                    .configure(background="#000000")
+                    .configure_view(strokeWidth=0)
+                    .configure_axis(
+                        labelColor="#ffffff", titleColor="#ffffff", domainColor="#666", gridColor="#333", tickColor="#666"
+                    )
+                    .configure_legend(labelColor="#ffffff", titleColor="#ffffff")
                 )
                 st.altair_chart(bar_chart, width="stretch")
             else:
