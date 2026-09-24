@@ -4,13 +4,9 @@ Upload a raw `.eml` file and get an analyst-ready phishing verdict. Deterministi
 checks extract the evidence; Claude synthesizes it into a verdict, confidence
 score, indicator list, and recommended action.
 
-![Phishing Triage verdict panel showing a malicious verdict at 90% confidence for a gift-card business email compromise message impersonating an executive, with indicators for gift-card urgency pressure, confidentiality pressure, and a free-webmail sending domain](docs/verdict-bec-auth-pass.png)
+![Assessment tab showing a malicious verdict at 92% confidence for a bank-brand-impersonation phishing email, with a recommended action callout and six cited indicators ranging from HIGH severity (display-name impersonation, deceptive link domain, urgency-based social engineering) to MEDIUM (unvalidated authentication, Return-Path mismatch) to LOW (routing IP is generic cloud hosting)](docs/assessment-brand-impersonation.png)
 
-A gift-card BEC message that passes SPF, DKIM, and DMARC, correctly flagged malicious from content alone.
-
-![Message metadata, authentication, and threat-intelligence panels for the same BEC message, showing SPF, DKIM, and DMARC all passing and no threat-intelligence detections, with the raw body excerpt showing the gift-card request](docs/verdict-bec-details.png)
-
-Authentication passes cleanly and every threat-intel lookup comes back clean — the verdict rests entirely on what the message asks the recipient to do.
+A bank-loyalty-program phishing email where SPF/DKIM/DMARC come back inconclusive (`temperror`/`none`) rather than a clean fail — the verdict still lands on malicious from brand impersonation, a deceptive link domain, and urgency-driven body content.
 
 ## How it works
 
@@ -31,9 +27,17 @@ Authentication passes cleanly and every threat-intel lookup comes back clean —
    can respond only through a single forced tool call, `record_verdict`, which
    returns a structured verdict (`benign` / `suspicious` / `malicious`),
    confidence, cited indicators, and a recommended action.
-4. **Display** (`app.py`) — a Streamlit front end that renders everything,
-   including defanged/inert indicators so nothing is ever clickable or rendered
-   as live HTML.
+4. **Display** (`app.py`) — a Streamlit front end with three tabs: **Dashboard**
+   (the landing tab — aggregate history across every email analyzed),
+   **Assessment** (upload a `.eml` and see its verdict), and **Details**
+   (that same email's metadata, authentication, deterministic findings, and
+   threat-intel lookups, split out so it doesn't compete with the verdict for
+   attention). Indicators are always defanged/inert so nothing is ever
+   clickable or rendered as live HTML.
+
+![Details tab showing message metadata, authentication results (SPF temperror, DKIM none, DMARC temperror), deterministic findings, extracted URLs and routing IPs, and threat-intelligence lookups for the same brand-impersonation phishing email](docs/details-tab.png)
+
+Authentication came back inconclusive rather than a clean fail, and every threat-intel lookup shows 0 detections — the Assessment tab's malicious verdict rests on brand impersonation and link deception, not on any of this.
 
 ## Safety properties
 
@@ -117,17 +121,17 @@ the app will parse, enrich, and triage it.
 
 ## Dashboard
 
-A second tab aggregates every triage result into a running history, persisted
-locally in SQLite (`triage_history.db`, gitignored) so it survives restarts
-rather than resetting each session.
+The landing tab aggregates every triage result into a running history,
+persisted locally in SQLite (`triage_history.db`, gitignored) so it survives
+restarts rather than resetting each session.
 
-![Dashboard tab showing triage history totals — 3 emails analyzed, 2 malicious (67%), 0 suspicious, 1 benign (33%), average confidence 86% — and a table of each processed email with its file, verdict, confidence, and an editable Status column set to Pending](docs/dashboard-summary.png)
+![Dashboard tab showing five KPI numbers (5 total analyzed, 3 malicious 60%, 1 suspicious 20%, 1 benign 20%, 87% average confidence), a verdict-breakdown donut chart, and a horizontal bar chart of the ten most-cited indicator strings colored by severity](docs/dashboard-overview.png)
 
-Totals, verdict breakdown, and average confidence across every analyzed email, with an editable Status column (Pending / Reviewed / Escalated / False Positive) for tracking remediation.
+Totals, verdict breakdown, and the indicator strings most frequently cited across every analyzed email — colored by severity (red/orange/green for high/medium/low) so recurring high-severity patterns stand out from one-off findings.
 
-![Horizontal bar chart of the most frequently cited indicator strings across all analyzed emails, including return-path and reply-to mismatches, urgency-driven language, tracking pixels, and malicious trackers](docs/dashboard-indicators-chart.png)
+![Processed emails table listing five analyzed messages with their file, subject, verdict, confidence, and an editable Status dropdown, all set to Pending](docs/dashboard-processed-emails.png)
 
-The indicator strings most frequently cited across every verdict, surfacing recurring attack patterns rather than one-off findings.
+Every processed email in one table, with an editable Status column (Pending / Reviewed / Escalated / False Positive) for tracking remediation.
 
 ## Test samples
 
@@ -150,7 +154,7 @@ python -c "from email_parser import parse_email; print(parse_email(open('samples
 ## Project structure
 
 ```
-app.py            Streamlit front end (single-email triage + dashboard tabs)
+app.py            Streamlit front end (Dashboard / Assessment / Details tabs)
 email_parser.py   Deterministic .eml parsing and header/content analysis
 enrich.py         VirusTotal / AbuseIPDB / urlscan.io lookups
 verdict.py        Claude-based verdict synthesis
