@@ -87,12 +87,13 @@ def _kpi_html(label: str, value: str, color: str) -> str:
 
 
 st.title("🛡 Phishing Triage")
-st.caption(
-    "Upload a raw email. Deterministic checks gather the evidence; "
-    "the model synthesizes an analyst-ready verdict."
+st.info(
+    "**How to use this tool:** Upload a raw email. Deterministic checks gather "
+    "the evidence; the model synthesizes an analyst-ready verdict.",
+    icon="👉",
 )
 
-tab_dashboard, tab_assessment, tab_details = st.tabs(["Dashboard", "Assessment", "Details"])
+tab_dashboard, tab_assessment, tab_details = st.tabs(["DASHBOARD", "ASSESSMENT", "DETAILS"])
 
 # Assessment runs first in code (regardless of tab order on screen) so parsed/
 # enrichment/result are already bound by the time the Details tab reads them --
