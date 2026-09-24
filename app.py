@@ -81,7 +81,7 @@ def _kpi_html(label: str, value: str, color: str) -> str:
     return (
         f"<div style='text-align:center;padding:.5rem 0;'>"
         f"<div style='font-size:2.1rem;font-weight:800;color:{color};line-height:1.1;'>{value}</div>"
-        f"<div style='color:#666;font-size:.85rem;margin-top:.25rem;'>{label}</div>"
+        f"<div style='color:#aaaaaa;font-size:.85rem;margin-top:.25rem;'>{label}</div>"
         f"</div>"
     )
 
@@ -162,7 +162,7 @@ with tab_assessment:
                     f"<span style='display:inline-block;min-width:110px;font-weight:700;"
                     f"color:{sev_color};'>{badge} {ind['severity'].upper()}</span>"
                     f"<span style='font-weight:600;'>{html.escape(ind['indicator'])}</span>"
-                    f"<div style='margin-left:110px;color:#555;white-space:pre-wrap;'>"
+                    f"<div style='margin-left:110px;color:#cccccc;white-space:pre-wrap;'>"
                     f"{html.escape(ind['evidence'])}</div>"
                     f"</div>"
                 )
@@ -264,11 +264,11 @@ with tab_dashboard:
         benign_n = int(verdict_counts.get("benign", 0))
 
         kpis = [
-            ("Total analyzed", str(total), "#0b0b0b"),
-            ("Malicious", f"{malicious_n} ({malicious_n / total:.0%})", "#b00020"),
-            ("Suspicious", f"{suspicious_n} ({suspicious_n / total:.0%})", "#c77700"),
-            ("Benign", f"{benign_n} ({benign_n / total:.0%})", "#1a7f37"),
-            ("Avg. confidence", f"{avg_confidence:.0f}%", "#0b0b0b"),
+            ("Total analyzed", str(total), "#ffffff"),
+            ("Malicious", f"{malicious_n} ({malicious_n / total:.0%})", "#ff4d5e"),
+            ("Suspicious", f"{suspicious_n} ({suspicious_n / total:.0%})", "#ffa733"),
+            ("Benign", f"{benign_n} ({benign_n / total:.0%})", "#3ddc6f"),
+            ("Avg. confidence", f"{avg_confidence:.0f}%", "#ffffff"),
         ]
         kpi_cols = st.columns(5)
         for col, (label, value, kcolor) in zip(kpi_cols, kpis):
@@ -296,6 +296,9 @@ with tab_dashboard:
                     tooltip=["Verdict", "Count"],
                 )
                 .properties(height=260)
+                .configure(background="#000000")
+                .configure_view(strokeWidth=0)
+                .configure_legend(labelColor="#ffffff", titleColor="#ffffff")
             )
             st.altair_chart(donut, width="stretch")
 
