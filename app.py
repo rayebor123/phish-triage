@@ -5,9 +5,9 @@ SAFETY: the email body is rendered with st.code / st.text only.
 Never use st.markdown(..., unsafe_allow_html=True) on message content — that
 executes the phishing page's HTML and JavaScript in your own browser and loads
 its remote tracking pixels. The one exception is the recommended-action callout
-below, which runs the model's text through html.escape() before it ever reaches
-unsafe_allow_html=True -- any HTML/markdown syntax an attacker got the model to
-echo renders as inert escaped text, never as markup.
+and indicator badges below, which run the model's text through html.escape()
+before it ever reaches unsafe_allow_html=True -- any HTML/markdown syntax an
+attacker got the model to echo renders as inert escaped text, never as markup.
 """
 
 import html
@@ -31,8 +31,12 @@ VERDICT_STYLE = {
     "suspicious": ("🟠", "#c77700"),
     "benign": ("🟢", "#1a7f37"),
 }
+VERDICT_COLOR_SCALE = alt.Scale(
+    domain=["Malicious", "Suspicious", "Benign"], range=["#b00020", "#c77700", "#1a7f37"]
+)
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 SEVERITY_COLOR = {"high": "#b00020", "medium": "#c77700", "low": "#9c7a00"}
+SEVERITY_BADGE = {"high": "🔴", "medium": "🟠", "low": "🟡"}
 
 # AbuseIPDB confidence at or above this is shown as a detection. Below it, a
 # non-zero score is shown as low-confidence -- large mail providers' shared
@@ -72,16 +76,30 @@ def _save(filename: str, parsed: dict, result: dict):
     return storage.save_result(filename, parsed, result)
 
 
+def _kpi_html(label: str, value: str, color: str) -> str:
+    return (
+        f"<div style='text-align:center;padding:.5rem 0;'>"
+        f"<div style='font-size:2.1rem;font-weight:800;color:{color};line-height:1.1;'>{value}</div>"
+        f"<div style='color:#666;font-size:.85rem;margin-top:.25rem;'>{label}</div>"
+        f"</div>"
+    )
+
+
 st.title("🛡 Phishing Triage")
 st.caption(
     "Upload a raw email. Deterministic checks gather the evidence; "
     "the model synthesizes an analyst-ready verdict."
 )
 
-tab_triage, tab_dashboard = st.tabs(["Single email", "Dashboard"])
+tab_dashboard, tab_assessment, tab_details = st.tabs(["Dashboard", "Assessment", "Details"])
 
-with tab_triage:
+# Assessment runs first in code (regardless of tab order on screen) so parsed/
+# enrichment/result are already bound by the time the Details tab reads them --
+# Streamlit executes every tab's body on each rerun, only visibility toggles.
+with tab_assessment:
     uploaded = st.file_uploader("Raw email (.eml)", type=["eml", "txt"])
+
+    parsed = enrichment = result = None
 
     if uploaded is not None:
         raw = uploaded.read()
@@ -132,7 +150,6 @@ with tab_triage:
             # prompt asks it to cite the observed value verbatim in "evidence"),
             # so they're HTML-escaped before insertion -- same rule as the
             # recommended-action box above.
-            SEVERITY_BADGE = {"high": "🔴", "medium": "🟠", "low": "🟡"}
             indicator_html = []
             for ind in sorted(
                 result["indicators"], key=lambda i: SEVERITY_ORDER.get(i["severity"], 3)
@@ -149,8 +166,13 @@ with tab_triage:
                     f"</div>"
                 )
             st.markdown("".join(indicator_html), unsafe_allow_html=True)
+    else:
+        st.info("Upload a .eml file to begin. In Gmail: ⋮ → Show original → Download Original.")
 
-        st.divider()
+with tab_details:
+    if parsed is None:
+        st.info("Upload and analyze an email in the Assessment tab to see its details here.")
+    else:
         left, right = st.columns(2)
 
         with left:
@@ -223,28 +245,84 @@ with tab_triage:
 
         with st.expander("Raw body excerpt (inert text — never rendered as HTML)"):
             st.text(parsed["text_body"] or "(no plain-text body)")
-    else:
-        st.info("Upload a .eml file to begin. In Gmail: ⋮ → Show original → Download Original.")
 
 with tab_dashboard:
     st.subheader("Triage history")
     emails = storage.get_all_emails()
 
     if not emails:
-        st.info("No emails analyzed yet. Results from the Single email tab are saved here automatically.")
+        st.info("No emails analyzed yet. Results from the Assessment tab are saved here automatically.")
     else:
         history_df = pd.DataFrame(emails)
         total = len(history_df)
         verdict_counts = history_df["verdict"].value_counts()
         avg_confidence = history_df["confidence"].mean()
 
-        stat_cols = st.columns(5)
-        stat_cols[0].metric("Total analyzed", total)
-        for col, verdict in zip(stat_cols[1:4], ("malicious", "suspicious", "benign")):
-            n = int(verdict_counts.get(verdict, 0))
-            col.metric(verdict.capitalize(), f"{n} ({n / total:.0%})")
-        stat_cols[4].metric("Avg. confidence", f"{avg_confidence:.0f}%")
+        malicious_n = int(verdict_counts.get("malicious", 0))
+        suspicious_n = int(verdict_counts.get("suspicious", 0))
+        benign_n = int(verdict_counts.get("benign", 0))
 
+        kpis = [
+            ("Total analyzed", str(total), "#0b0b0b"),
+            ("Malicious", f"{malicious_n} ({malicious_n / total:.0%})", "#b00020"),
+            ("Suspicious", f"{suspicious_n} ({suspicious_n / total:.0%})", "#c77700"),
+            ("Benign", f"{benign_n} ({benign_n / total:.0%})", "#1a7f37"),
+            ("Avg. confidence", f"{avg_confidence:.0f}%", "#0b0b0b"),
+        ]
+        kpi_cols = st.columns(5)
+        for col, (label, value, kcolor) in zip(kpi_cols, kpis):
+            col.markdown(_kpi_html(label, value, kcolor), unsafe_allow_html=True)
+
+        st.write("")
+        chart_left, chart_right = st.columns([1, 2])
+
+        with chart_left:
+            st.caption("Verdict breakdown")
+            verdict_df = pd.DataFrame(
+                {
+                    "Verdict": ["Malicious", "Suspicious", "Benign"],
+                    "Count": [malicious_n, suspicious_n, benign_n],
+                }
+            )
+            donut = (
+                alt.Chart(verdict_df)
+                .mark_arc(innerRadius=55, outerRadius=95)
+                .encode(
+                    theta=alt.Theta("Count:Q"),
+                    color=alt.Color(
+                        "Verdict:N", scale=VERDICT_COLOR_SCALE, legend=alt.Legend(title=None, orient="bottom")
+                    ),
+                    tooltip=["Verdict", "Count"],
+                )
+                .properties(height=260)
+            )
+            st.altair_chart(donut, width="stretch")
+
+        with chart_right:
+            st.caption("Most common indicators")
+            top_indicators = storage.indicator_counts(limit=10)
+            if top_indicators:
+                indicator_df = pd.DataFrame(top_indicators, columns=["Indicator", "Count"])
+                max_count = int(indicator_df["Count"].max())
+                bar_chart = (
+                    alt.Chart(indicator_df)
+                    .mark_bar(color="#2a78d6", cornerRadiusEnd=4)
+                    .encode(
+                        x=alt.X(
+                            "Count:Q",
+                            title="Times cited",
+                            axis=alt.Axis(values=list(range(max_count + 1)), format="d"),
+                        ),
+                        y=alt.Y("Indicator:N", sort="-x", title=None),
+                        tooltip=["Indicator", "Count"],
+                    )
+                    .properties(height=260)
+                )
+                st.altair_chart(bar_chart, width="stretch")
+            else:
+                st.caption("No indicators recorded yet.")
+
+        st.divider()
         st.subheader("Processed emails")
         st.caption("Edit Status inline to track what's been actioned.")
 
@@ -278,27 +356,3 @@ with tab_dashboard:
             for _, row in changed.iterrows():
                 storage.update_status(int(row["ID"]), row["Status"])
             st.rerun()
-
-        st.subheader("Most common indicators")
-        top_indicators = storage.indicator_counts(limit=10)
-        if top_indicators:
-            st.caption("Top 10 indicator strings by how often they've been cited across all verdicts.")
-            indicator_df = pd.DataFrame(top_indicators, columns=["Indicator", "Count"])
-            max_count = int(indicator_df["Count"].max())
-            chart = (
-                alt.Chart(indicator_df)
-                .mark_bar(color="#2a78d6", cornerRadiusEnd=4)
-                .encode(
-                    x=alt.X(
-                        "Count:Q",
-                        title="Times cited",
-                        axis=alt.Axis(values=list(range(max_count + 1)), format="d"),
-                    ),
-                    y=alt.Y("Indicator:N", sort="-x", title=None),
-                    tooltip=["Indicator", "Count"],
-                )
-                .properties(height=max(120, 32 * len(indicator_df)))
-            )
-            st.altair_chart(chart, width="stretch")
-        else:
-            st.caption("No indicators recorded yet.")
