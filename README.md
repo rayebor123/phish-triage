@@ -115,6 +115,20 @@ streamlit run app.py
 Upload a `.eml` file (in Gmail: **⋮ → Show original → Download Original**) and
 the app will parse, enrich, and triage it.
 
+## Dashboard
+
+A second tab aggregates every triage result into a running history, persisted
+locally in SQLite (`triage_history.db`, gitignored) so it survives restarts
+rather than resetting each session.
+
+![Dashboard tab showing triage history totals — 3 emails analyzed, 2 malicious (67%), 0 suspicious, 1 benign (33%), average confidence 86% — and a table of each processed email with its file, verdict, confidence, and an editable Status column set to Pending](docs/dashboard-summary.png)
+
+Totals, verdict breakdown, and average confidence across every analyzed email, with an editable Status column (Pending / Reviewed / Escalated / False Positive) for tracking remediation.
+
+![Horizontal bar chart of the most frequently cited indicator strings across all analyzed emails, including return-path and reply-to mismatches, urgency-driven language, tracking pixels, and malicious trackers](docs/dashboard-indicators-chart.png)
+
+The indicator strings most frequently cited across every verdict, surfacing recurring attack patterns rather than one-off findings.
+
 ## Test samples
 
 `samples/` contains three fixtures:
@@ -136,10 +150,11 @@ python -c "from email_parser import parse_email; print(parse_email(open('samples
 ## Project structure
 
 ```
-app.py            Streamlit front end
+app.py            Streamlit front end (single-email triage + dashboard tabs)
 email_parser.py   Deterministic .eml parsing and header/content analysis
 enrich.py         VirusTotal / AbuseIPDB / urlscan.io lookups
 verdict.py        Claude-based verdict synthesis
+storage.py        SQLite-backed triage history and remediation status
 samples/          Test fixtures (benign, phishing, prompt injection)
 ```
 
