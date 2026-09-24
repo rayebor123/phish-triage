@@ -275,9 +275,9 @@ with tab_dashboard:
             col.markdown(_kpi_html(label, value, kcolor), unsafe_allow_html=True)
 
         st.write("")
-        chart_left, chart_right = st.columns([1, 2])
+        donut_col, _spacer = st.columns([1, 2])
 
-        with chart_left:
+        with donut_col:
             st.caption("Verdict breakdown")
             verdict_df = pd.DataFrame(
                 {
@@ -302,40 +302,46 @@ with tab_dashboard:
             )
             st.altair_chart(donut, width="stretch")
 
-        with chart_right:
-            st.caption("Most common indicators")
-            top_indicators = storage.indicator_counts(limit=10)
-            if top_indicators:
-                indicator_df = pd.DataFrame(top_indicators, columns=["Indicator", "Count", "Severity"])
-                max_count = int(indicator_df["Count"].max())
-                bar_chart = (
-                    alt.Chart(indicator_df)
-                    .mark_bar(cornerRadiusEnd=4)
-                    .encode(
-                        x=alt.X(
-                            "Count:Q",
-                            title="Times cited",
-                            axis=alt.Axis(values=list(range(max_count + 1)), format="d"),
-                        ),
-                        y=alt.Y("Indicator:N", sort="-x", title=None),
-                        color=alt.Color(
-                            "Severity:N",
-                            scale=SEVERITY_COLOR_SCALE,
-                            legend=alt.Legend(title=None, orient="bottom"),
-                        ),
-                        tooltip=["Indicator", "Count", "Severity"],
-                    )
-                    .properties(height=260)
-                    .configure(background="#000000")
-                    .configure_view(strokeWidth=0)
-                    .configure_axis(
-                        labelColor="#ffffff", titleColor="#ffffff", domainColor="#666", gridColor="#333", tickColor="#666"
-                    )
-                    .configure_legend(labelColor="#ffffff", titleColor="#ffffff")
+        st.write("")
+        st.caption("Most common indicators")
+        top_indicators = storage.indicator_counts(limit=10)
+        if top_indicators:
+            # Full label, never truncated -- these get long ("Display name /
+            # sender identity mismatch with free webmail domain"), and squeezed
+            # into a half-width column they were cut off with no way to read
+            # the rest. A dedicated full-width row plus a generous labelLimit
+            # gives them room; row height grows with the indicator count so
+            # long labels don't get squashed either.
+            indicator_df = pd.DataFrame(top_indicators, columns=["Indicator", "Count", "Severity"])
+            max_count = int(indicator_df["Count"].max())
+            bar_chart = (
+                alt.Chart(indicator_df)
+                .mark_bar(cornerRadiusEnd=4)
+                .encode(
+                    x=alt.X(
+                        "Count:Q",
+                        title="Times cited",
+                        axis=alt.Axis(values=list(range(max_count + 1)), format="d"),
+                    ),
+                    y=alt.Y("Indicator:N", sort="-x", title=None, axis=alt.Axis(labelLimit=500)),
+                    color=alt.Color(
+                        "Severity:N",
+                        scale=SEVERITY_COLOR_SCALE,
+                        legend=alt.Legend(title=None, orient="bottom"),
+                    ),
+                    tooltip=["Indicator", "Count", "Severity"],
                 )
-                st.altair_chart(bar_chart, width="stretch")
-            else:
-                st.caption("No indicators recorded yet.")
+                .properties(height=max(220, 40 * len(indicator_df)))
+                .configure(background="#000000")
+                .configure_view(strokeWidth=0)
+                .configure_axis(
+                    labelColor="#ffffff", titleColor="#ffffff", domainColor="#666", gridColor="#333", tickColor="#666"
+                )
+                .configure_legend(labelColor="#ffffff", titleColor="#ffffff")
+            )
+            st.altair_chart(bar_chart, width="stretch")
+        else:
+            st.caption("No indicators recorded yet.")
 
         st.divider()
         st.subheader("Processed emails")
