@@ -35,9 +35,9 @@ VERDICT_COLOR_SCALE = alt.Scale(
     domain=["Malicious", "Suspicious", "Benign"], range=["#b00020", "#c77700", "#1a7f37"]
 )
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
-SEVERITY_COLOR = {"high": "#b00020", "medium": "#c77700", "low": "#b8860b"}
-SEVERITY_COLOR_SCALE = alt.Scale(domain=["high", "medium", "low"], range=["#b00020", "#c77700", "#FFFFE0"])
-SEVERITY_BADGE = {"high": "🔴", "medium": "🟠", "low": "🟡"}
+SEVERITY_COLOR = {"high": "#b00020", "medium": "#c77700", "low": "#3ddc6f"}
+SEVERITY_COLOR_SCALE = alt.Scale(domain=["high", "medium", "low"], range=["#b00020", "#c77700", "#3ddc6f"])
+SEVERITY_BADGE = {"high": "🔴", "medium": "🟠", "low": "🟢"}
 
 # AbuseIPDB confidence at or above this is shown as a detection. Below it, a
 # non-zero score is shown as low-confidence -- large mail providers' shared
