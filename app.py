@@ -4,9 +4,13 @@ Streamlit front end.
 SAFETY: the email body is rendered with st.code / st.text only.
 Never use st.markdown(..., unsafe_allow_html=True) on message content — that
 executes the phishing page's HTML and JavaScript in your own browser and loads
-its remote tracking pixels.
+its remote tracking pixels. The one exception is the recommended-action callout
+below, which runs the model's text through html.escape() before it ever reaches
+unsafe_allow_html=True -- any HTML/markdown syntax an attacker got the model to
+echo renders as inert escaped text, never as markup.
 """
 
+import html
 import altair as alt
 import pandas as pd
 import streamlit as st
@@ -107,8 +111,20 @@ with tab_triage:
             st.write("")
             st.subheader("Assessment")
             st.text(result["summary"])
-            st.markdown("**Recommended action**")
-            st.text(result["recommended_action"])
+
+            # The action text is still model output over untrusted evidence. It's
+            # HTML-escaped before insertion so it can only ever render as inert
+            # text inside this box, never as markup -- see the module SAFETY note.
+            escaped_action = html.escape(result["recommended_action"])
+            st.markdown(
+                f"<div style='border-left:6px solid {color};background:{color}1a;"
+                f"padding:0.75rem 1rem;border-radius:.25rem;margin-top:.5rem;'>"
+                f"<div style='font-weight:700;font-size:1.05rem;margin-bottom:.35rem;'>"
+                f"{icon} Recommended action</div>"
+                f"<div style='white-space:pre-wrap;'>{escaped_action}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
 
             st.subheader("Indicators")
             for ind in sorted(
