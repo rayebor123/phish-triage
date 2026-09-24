@@ -32,6 +32,7 @@ VERDICT_STYLE = {
     "benign": ("🟢", "#1a7f37"),
 }
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
+SEVERITY_COLOR = {"high": "#b00020", "medium": "#c77700", "low": "#9c7a00"}
 
 # AbuseIPDB confidence at or above this is shown as a detection. Below it, a
 # non-zero score is shown as low-confidence -- large mail providers' shared
@@ -120,18 +121,34 @@ with tab_triage:
                 f"<div style='border-left:6px solid {color};background:{color}1a;"
                 f"padding:0.75rem 1rem;border-radius:.25rem;margin-top:.5rem;'>"
                 f"<div style='font-weight:700;font-size:1.05rem;margin-bottom:.35rem;'>"
-                f"{icon} Recommended action</div>"
+                f"📋 Recommended action</div>"
                 f"<div style='white-space:pre-wrap;'>{escaped_action}</div>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
 
             st.subheader("Indicators")
+            # Both fields are model output over untrusted evidence (the system
+            # prompt asks it to cite the observed value verbatim in "evidence"),
+            # so they're HTML-escaped before insertion -- same rule as the
+            # recommended-action box above.
+            SEVERITY_BADGE = {"high": "🔴", "medium": "🟠", "low": "🟡"}
+            indicator_html = []
             for ind in sorted(
                 result["indicators"], key=lambda i: SEVERITY_ORDER.get(i["severity"], 3)
             ):
-                badge = {"high": "🔴", "medium": "🟠", "low": "🟡"}.get(ind["severity"], "⚪")
-                st.text(f"{badge} {ind['indicator']}\n    {ind['evidence']}")
+                sev_color = SEVERITY_COLOR.get(ind["severity"], "#666")
+                badge = SEVERITY_BADGE.get(ind["severity"], "⚪")
+                indicator_html.append(
+                    f"<div style='margin-bottom:.6rem;'>"
+                    f"<span style='display:inline-block;min-width:110px;font-weight:700;"
+                    f"color:{sev_color};'>{badge} {ind['severity'].upper()}</span>"
+                    f"<span style='font-weight:600;'>{html.escape(ind['indicator'])}</span>"
+                    f"<div style='margin-left:110px;color:#555;white-space:pre-wrap;'>"
+                    f"{html.escape(ind['evidence'])}</div>"
+                    f"</div>"
+                )
+            st.markdown("".join(indicator_html), unsafe_allow_html=True)
 
         st.divider()
         left, right = st.columns(2)
